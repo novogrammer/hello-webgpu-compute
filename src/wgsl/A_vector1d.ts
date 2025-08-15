@@ -1,9 +1,10 @@
 import '../style.scss'
+import Timer from '../Timer';
 import { initWebGPUAsync } from './utils';
 
 
 
-const NUM_ELEMENTS = 1024;
+const NUM_ELEMENTS = 1024*1024;
 
 // WGSLカーネル
 const shaderCode = /* wgsl */`
@@ -52,7 +53,16 @@ function makeCommandBuffer(device:GPUDevice,inputBuffer:GPUBuffer,outputBuffer:G
 
 async function runAsync():Promise<string[]> {
   const messageList:string[]=[];
+
+  const timerInit=new Timer();
+  const timerMakeCommand=new Timer();
+  const timerCompute=new Timer();
+  const timerMap=new Timer();
+
+  timerInit.start();
   const device = await initWebGPUAsync();
+  timerInit.stop();
+
 
   const inputData = new Float32Array(NUM_ELEMENTS);
   for (let i = 0; i < NUM_ELEMENTS; i++) {
@@ -79,15 +89,28 @@ async function runAsync():Promise<string[]> {
 
 
   try{
+    timerMakeCommand.start();
     const commandBuffer=makeCommandBuffer(device,inputBuffer,outputBuffer,readBuffer);
+    timerMakeCommand.stop();
 
+    timerCompute.start();
     device.queue.submit([commandBuffer]);
     await device.queue.onSubmittedWorkDone();
+    timerCompute.stop();
 
+    timerMap.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
+    timerMap.stop();
     const outputData = new Float32Array(readBuffer.getMappedRange());
-    messageList.push(`入力: ${inputData}`);
-    messageList.push(`出力: ${outputData}`);
+
+    messageList.push(`NUM_ELEMENTS: ${NUM_ELEMENTS}`);
+    messageList.push(`inputData[0]: ${inputData[0]}`);
+    messageList.push(`outputData[0]: ${outputData[0]}`);
+
+    messageList.push(`timerInit: ${timerInit.getElapsed()}[ms]`);
+    messageList.push(`timerMakeCommand: ${timerMakeCommand.getElapsed()}[ms]`);
+    messageList.push(`timerCompute: ${timerCompute.getElapsed()}[ms]`);
+    messageList.push(`timerMap: ${timerMap.getElapsed()}[ms]`);
     readBuffer.unmap();
 
   }finally{
