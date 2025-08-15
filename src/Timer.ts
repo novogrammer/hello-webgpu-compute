@@ -1,6 +1,11 @@
 export default class Timer {
+  private label:string;
   private startTime?:number;
   private stopTime?:number;
+
+  constructor(label:string){
+    this.label=label;
+  }
 
   start(): void {
     this.startTime = performance.now();
@@ -20,5 +25,8 @@ export default class Timer {
       throw new Error("Timer has not been stopped.");
     }
     return this.stopTime - this.startTime;
+  }
+  getElapsedMessage(): string{
+    return `${this.label}: ${this.getElapsed()}[ms]`;
   }
 }

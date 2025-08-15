@@ -5,19 +5,26 @@ import { initWebGPUAsync } from './utils';
 
 
 const NUM_ELEMENTS = 1024*1024;
+const WORKGROUP = 64;
+// Workgroup数 = ceil(NUM_ELEMENTS / workgroup_size)
+const DISPATCH_X = Math.ceil(NUM_ELEMENTS / WORKGROUP);
 
 // WGSLカーネル
 const shaderCode = /* wgsl */`
-  @group(0) @binding(0) var<storage, read>  inputBuffer : array<f32>;
-  @group(0) @binding(1) var<storage, read_write> outputBuffer : array<f32>;
+struct BufF32 {
+  data: array<f32>,
+};
 
-  @compute @workgroup_size(64)
-  fn main(@builtin(global_invocation_id) global_id : vec3<u32>) {
-    let i = global_id.x;
-    if (i < ${NUM_ELEMENTS}u) {
-      outputBuffer[i] = inputBuffer[i] * 2.0;
-    }
+@group(0) @binding(0) var<storage, read>       inputBuffer  : BufF32;
+@group(0) @binding(1) var<storage, read_write> outputBuffer : BufF32;
+
+@compute @workgroup_size(${WORKGROUP})
+fn main(@builtin(global_invocation_id) gid : vec3<u32>) {
+  let i = gid.x;
+  if (i < ${NUM_ELEMENTS}u) {
+    outputBuffer.data[i] = inputBuffer.data[i] * 2.0;
   }
+}
 `;
 
 function makeCommandBuffer(device:GPUDevice,inputBuffer:GPUBuffer,outputBuffer:GPUBuffer,readBuffer:GPUBuffer){
@@ -40,8 +47,7 @@ function makeCommandBuffer(device:GPUDevice,inputBuffer:GPUBuffer,outputBuffer:G
   pass.setPipeline(pipeline);
   pass.setBindGroup(0, bindGroup);
 
-  // Workgroup数 = ceil(NUM_ELEMENTS / workgroup_size)
-  pass.dispatchWorkgroups(Math.ceil(NUM_ELEMENTS / 64));
+  pass.dispatchWorkgroups(DISPATCH_X);
   pass.end();
 
   encoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, Math.min(outputBuffer.size,readBuffer.size));
@@ -54,10 +60,10 @@ function makeCommandBuffer(device:GPUDevice,inputBuffer:GPUBuffer,outputBuffer:G
 async function runAsync():Promise<string[]> {
   const messageList:string[]=[];
 
-  const timerInit=new Timer();
-  const timerMakeCommand=new Timer();
-  const timerCompute=new Timer();
-  const timerMap=new Timer();
+  const timerInit=new Timer("timerInit");
+  const timerMakeCommand=new Timer("timerMakeCommand");
+  const timerCompute=new Timer("timerCompute");
+  const timerMap=new Timer("timerMap");
 
   timerInit.start();
   const device = await initWebGPUAsync();
@@ -107,16 +113,17 @@ async function runAsync():Promise<string[]> {
     messageList.push(`inputData[0]: ${inputData[0]}`);
     messageList.push(`outputData[0]: ${outputData[0]}`);
 
-    messageList.push(`timerInit: ${timerInit.getElapsed()}[ms]`);
-    messageList.push(`timerMakeCommand: ${timerMakeCommand.getElapsed()}[ms]`);
-    messageList.push(`timerCompute: ${timerCompute.getElapsed()}[ms]`);
-    messageList.push(`timerMap: ${timerMap.getElapsed()}[ms]`);
+    messageList.push(timerInit.getElapsedMessage());
+    messageList.push(timerMakeCommand.getElapsedMessage());
+    messageList.push(timerCompute.getElapsedMessage());
+    messageList.push(timerMap.getElapsedMessage());
     readBuffer.unmap();
 
   }finally{
     inputBuffer.destroy();
     outputBuffer.destroy();
     readBuffer.destroy();
+    await device.queue.onSubmittedWorkDone();
     device.destroy();
   }
   return messageList;
@@ -135,12 +142,22 @@ async function mainAsync():Promise<void> {
   }
 
   executeElement.addEventListener("click",()=>{
+    executeElement.disabled = true;
     messageElement.value="computing...";
-    runAsync().then((messageList)=>{
+    (async()=>{
+      const messageList:string[]=[];
+      // ウォームアップ
+      messageList.push("ウォームアップ");
+      messageList.push(...await runAsync());
+      // 本計測
+      messageList.push("本計測");
+      messageList.push(...await runAsync());
       messageElement.value=messageList.join("\n");
-    }).catch((error)=>{
+    })().catch((error)=>{
       alert(error?.message ?? String(error));
       console.error(error);
+    }).finally(()=>{
+      executeElement.disabled = false;
     });
 
   });

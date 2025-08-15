@@ -8,5 +8,8 @@ export async function initWebGPUAsync():Promise<GPUDevice> {
   if (!adapter) {
     throw new Error('No GPU adapter found.');
   }
-  return adapter.requestDevice();
+  const device = await adapter.requestDevice();
+  device.lost.then(info => console.warn('GPU device lost:', info.reason, info.message));
+
+  return device;
 }
