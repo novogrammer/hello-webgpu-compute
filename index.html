@@ -6,7 +6,29 @@
     <title>Hello WebGPU Compute</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div class="l-main p-index">
+      <h1 class="p-index__title">Hello WebGPU Computeの目次</h1>
+      <h2 class="p-index__sub-title">1D配列の基礎演算。GPUスレッドモデル入門</h2>
+      <ul class="p-index__item-list">
+        <li class="p-index__item">WGSL版：<a href="wgsl/A_vector1d.html">wgsl/A_vector1d.html</a></li>
+        <li class="p-index__item">TSL版：<a href="tsl/A_vector1d.html">tsl/A_vector1d.html</a></li>
+      </ul>
+      <h2 class="p-index__sub-title">n×nぼかし（ナイーブ実装）</h2>
+      <ul class="p-index__item-list">
+        <li class="p-index__item">WGSL版：<a href="wgsl/B_blur_naive.html">wgsl/B_blur_naive.html</a></li>
+        <li class="p-index__item">TSL版：<a href="tsl/B_blur_naive.html">tsl/B_blur_naive.html</a></li>
+      </ul>
+      <h2 class="p-index__sub-title">n×nぼかし（共有メモリ＋バリア最適化）</h2>
+      <ul class="p-index__item-list">
+        <li class="p-index__item">WGSL版：<a href="wgsl/B_blur_shared.html">wgsl/B_blur_shared.html</a></li>
+        <li class="p-index__item">TSL版：<a href="tsl/B_blur_shared.html">tsl/B_blur_shared.html</a></li>
+      </ul>
+      <h2 class="p-index__sub-title">Game of Life（発展・面白系）</h2>
+      <ul class="p-index__item-list">
+        <li class="p-index__item">WGSL版：<a href="wgsl/C_game_of_life.html">wgsl/C_game_of_life.html</a></li>
+        <li class="p-index__item">TSL版：<a href="tsl/C_game_of_life.html">tsl/C_game_of_life.html</a></li>
+      </ul>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
