@@ -13,3 +13,9 @@ export async function initWebGpuAsync():Promise<GPUDevice> {
 
   return device;
 }
+
+export async function disposeWebGpuAsync(device:GPUDevice):Promise<void> {
+  console.log("disposeWebGpuAsync");
+  await device.queue.onSubmittedWorkDone();
+  device.destroy();
+}

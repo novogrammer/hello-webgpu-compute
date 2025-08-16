@@ -1,6 +1,6 @@
 import '../style.scss'
 import Timer from '../Timer';
-import { initWebGpuAsync } from './utils';
+import { disposeWebGpuAsync, initWebGpuAsync } from './utils';
 
 
 
@@ -119,8 +119,7 @@ async function runAsync():Promise<string[]> {
     inputBuffer.destroy();
     outputBuffer.destroy();
     readBuffer.destroy();
-    await device.queue.onSubmittedWorkDone();
-    device.destroy();
+    await disposeWebGpuAsync(device);
   }
   return messageList;
 }

@@ -1,7 +1,7 @@
 import '../style.scss'
 
 import Timer from '../Timer';
-import { initWebGpuAsync } from './utils';
+import { disposeWebGpuAsync, initWebGpuAsync } from './utils';
 
 const WIDTH = 1024;
 const HEIGHT = 1024;
@@ -207,8 +207,7 @@ async function runAsync(): Promise<string[]> {
     readBuffer.destroy();
     uniformBuffer.destroy();
 
-    await device.queue.onSubmittedWorkDone();
-    device.destroy();
+    await disposeWebGpuAsync(device);
     
   }
 
