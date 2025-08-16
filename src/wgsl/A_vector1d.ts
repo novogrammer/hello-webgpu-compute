@@ -1,6 +1,6 @@
 import '../style.scss'
-import Timer from '../Timer';
-import { disposeWebGpuAsync, initWebGpuAsync } from './utils';
+import Timer from '../utils/Timer';
+import { disposeWebGpuAsync, initWebGpuAsync } from './wgsl_utils';
 
 
 
