@@ -5,3 +5,43 @@ body {
   box-sizing: border-box;
 }
 
+.l-main{
+
+}
+
+.p-index{
+  &__title{
+
+  }
+  &__sub-title{
+
+  }
+  &__item-list{
+
+  }
+  &__item{
+    a{
+
+    }
+  }
+}
+
+.p-demo{
+  &__message{
+
+  }
+  &__execute{
+
+  }
+  &__canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    &--input{
+
+    }
+    &--output{
+
+    }
+  }
+}

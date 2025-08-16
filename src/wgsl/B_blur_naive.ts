@@ -1,4 +1,5 @@
 import '../style.scss'
+import { drawCheckerBoard, getImageData, showImageData, toFloat32Array, toUint8ClampedArray } from '../utils/canvas_utils';
 
 import Timer from '../utils/Timer';
 import { disposeWebGpuAsync, initWebGpuAsync } from './wgsl_utils';
@@ -123,7 +124,7 @@ function makeCommandBuffer(
   return commandBuffer;
 }
 
-async function runAsync(): Promise<string[]> {
+async function runAsync(canvasInputElement:HTMLCanvasElement,canvasOutputElement:HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
 
   const timerInit  = new Timer('init');
@@ -139,18 +140,10 @@ async function runAsync(): Promise<string[]> {
 
   const pixels = WIDTH * HEIGHT;
   const byteLength = pixels * 4 * 4; // RGBA * f32
-  const input = new Float32Array(pixels * 4);
 
-  // 簡単なテストパターン（横グラデ＋縦グラデ）
-  for (let y = 0; y < HEIGHT; y++) {
-    for (let x = 0; x < WIDTH; x++) {
-      const i = (y * WIDTH + x) * 4;
-      input[i + 0] = x / WIDTH;   // R
-      input[i + 1] = y / HEIGHT;  // G
-      input[i + 2] = 0.25;        // B
-      input[i + 3] = 1.0;         // A
-    }
-  }
+  drawCheckerBoard(canvasInputElement,WIDTH,HEIGHT);
+
+  const input=toFloat32Array(getImageData(canvasInputElement));
 
   const inputBuffer = device.createBuffer({
     size: byteLength,
@@ -190,11 +183,12 @@ async function runAsync(): Promise<string[]> {
 
     timerMap.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
-    const out = new Float32Array(readBuffer.getMappedRange());
+    const output = new Float32Array(readBuffer.getMappedRange());
+    showImageData(canvasOutputElement,toUint8ClampedArray(output),WIDTH,HEIGHT);
     timerMap.stop();
 
     lines.push(`WIDTH×HEIGHT: ${WIDTH}×${HEIGHT}, R=${RADIUS} → n=${RADIUS * 2 + 1}`);
-    lines.push(`input[0]: ${input[0]}, out[0]: ${out[0]}`);
+    lines.push(`input[0]: ${input[0]}, output[0]: ${output[0]}`);
     lines.push(timerInit.getElapsedMessage());
     lines.push(timerPrepare.getElapsedMessage());
     lines.push(timerCompute.getElapsedMessage());
@@ -226,13 +220,22 @@ async function mainAsync(): Promise<void> {
     throw new Error("executeElement is null");
   }
 
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
   executeElement.addEventListener('click', async () => {
     executeElement.disabled = true;
     messageElement.value = 'computing...';
     try {
       // ウォームアップ + 本計測
-      const warmup = await runAsync();
-      const main   = await runAsync();
+      const warmup = await runAsync(canvasInputElement,canvasOutputElement);
+      const main   = await runAsync(canvasInputElement,canvasOutputElement);
       messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
     } catch (error: any) {
       alert(error?.message ?? String(error));
