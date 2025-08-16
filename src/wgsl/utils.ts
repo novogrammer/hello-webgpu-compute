@@ -1,5 +1,5 @@
 
-export async function initWebGPUAsync():Promise<GPUDevice> {
+export async function initWebGpuAsync():Promise<GPUDevice> {
   if (!navigator.gpu) {
     throw new Error("WebGPU not supported on this browser.");
   }

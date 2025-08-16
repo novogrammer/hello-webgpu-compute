@@ -1,6 +1,6 @@
 import '../style.scss'
 import Timer from '../Timer';
-import { initWebGPUAsync } from './utils';
+import { initWebGpuAsync } from './utils';
 
 
 
@@ -65,7 +65,7 @@ async function runAsync():Promise<string[]> {
   const timerMap=new Timer("timerMap");
 
   timerInit.start();
-  const device = await initWebGPUAsync();
+  const device = await initWebGpuAsync();
   timerInit.stop();
 
 
