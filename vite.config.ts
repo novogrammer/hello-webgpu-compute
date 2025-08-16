@@ -12,7 +12,7 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'src/index.html'),
         wgsl_A: resolve(__dirname, 'src/wgsl/A_vector1d.html'),
-        // wgsl_Bn: resolve(__dirname, 'src/wgsl/B_blur_naive.html'),
+        wgsl_Bn: resolve(__dirname, 'src/wgsl/B_blur_naive.html'),
         // wgsl_Bs: resolve(__dirname, 'src/wgsl/B_blur_shared.html'),
         // wgsl_C: resolve(__dirname, 'src/wgsl/C_game_of_life.html'),
         // tsl_A: resolve(__dirname, 'src/tsl/A_vector1d.html'),
