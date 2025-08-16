@@ -61,7 +61,6 @@ async function runAsync():Promise<string[]> {
   const messageList:string[]=[];
 
   const timerInit=new Timer("timerInit");
-  const timerMakeCommand=new Timer("timerMakeCommand");
   const timerCompute=new Timer("timerCompute");
   const timerMap=new Timer("timerMap");
 
@@ -95,11 +94,9 @@ async function runAsync():Promise<string[]> {
 
 
   try{
-    timerMakeCommand.start();
-    const commandBuffer=makeCommandBuffer(device,inputBuffer,outputBuffer,readBuffer);
-    timerMakeCommand.stop();
-
     timerCompute.start();
+    const commandBuffer=makeCommandBuffer(device,inputBuffer,outputBuffer,readBuffer);
+
     device.queue.submit([commandBuffer]);
     await device.queue.onSubmittedWorkDone();
     timerCompute.stop();
@@ -114,7 +111,6 @@ async function runAsync():Promise<string[]> {
     messageList.push(`outputData[0]: ${outputData[0]}`);
 
     messageList.push(timerInit.getElapsedMessage());
-    messageList.push(timerMakeCommand.getElapsedMessage());
     messageList.push(timerCompute.getElapsedMessage());
     messageList.push(timerMap.getElapsedMessage());
     readBuffer.unmap();
@@ -141,24 +137,21 @@ async function mainAsync():Promise<void> {
     throw new Error("executeElement is null");
   }
 
-  executeElement.addEventListener("click",()=>{
+  executeElement.addEventListener("click",async ()=>{
     executeElement.disabled = true;
     messageElement.value="computing...";
-    (async()=>{
-      const messageList:string[]=[];
-      // ウォームアップ
-      messageList.push("ウォームアップ");
-      messageList.push(...await runAsync());
-      // 本計測
-      messageList.push("本計測");
-      messageList.push(...await runAsync());
-      messageElement.value=messageList.join("\n");
-    })().catch((error)=>{
+    try{
+      // ウォームアップ + 本計測
+      const warmup = await runAsync();
+      const main   = await runAsync();
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    }catch(error: any){
       alert(error?.message ?? String(error));
       console.error(error);
-    }).finally(()=>{
+
+    }finally{
       executeElement.disabled = false;
-    });
+    }
 
   });
 
@@ -166,8 +159,6 @@ async function mainAsync():Promise<void> {
 
 
 
-mainAsync().catch((error)=>{
-  console.error(error);
-})
+mainAsync().catch(console.error);
 
 
