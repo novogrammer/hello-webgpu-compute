@@ -31,8 +31,8 @@ fn idx(x: i32, y: i32, w: i32) -> i32 {
   return (y * w + x) * 4;
 }
 
-fn clampi(v: i32, lo: i32, hi: i32) -> i32 {
-  return max(lo, min(v, hi));
+fn clampi(value: i32, low: i32, high: i32) -> i32 {
+  return max(low, min(value, high));
 }
 
 @compute @workgroup_size(${WORKGROUP_X}, ${WORKGROUP_Y}, 1)
@@ -127,15 +127,15 @@ async function runAsync(): Promise<string[]> {
   const lines: string[] = [];
 
   const timerInit  = new Timer('init');
-  const timerPrep  = new Timer('prepare');
-  const timerExec  = new Timer('compute');
-  const timerRead  = new Timer('map');
+  const timerPrepare  = new Timer('prepare');
+  const timerCompute  = new Timer('compute');
+  const timerMap  = new Timer('map');
 
   timerInit.start();
   const device = await initWebGPUAsync();
   timerInit.stop();
 
-  timerPrep.start();
+  timerPrepare.start();
 
   const pixels = WIDTH * HEIGHT;
   const byteLength = pixels * 4 * 4; // RGBA * f32
@@ -176,29 +176,29 @@ async function runAsync(): Promise<string[]> {
   });
   device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
-  timerPrep.stop();
+  timerPrepare.stop();
 
   try{
 
-    timerExec.start();
+    timerCompute.start();
     const commandBuffer = makeCommandBuffer(
       device, uniformBuffer, inputBuffer, outputBuffer, readBuffer
     );
     device.queue.submit([commandBuffer]);
     await device.queue.onSubmittedWorkDone();
-    timerExec.stop();
+    timerCompute.stop();
 
-    timerRead.start();
+    timerMap.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
     const out = new Float32Array(readBuffer.getMappedRange());
-    timerRead.stop();
+    timerMap.stop();
 
     lines.push(`WIDTH×HEIGHT: ${WIDTH}×${HEIGHT}, R=${RADIUS} → n=${RADIUS * 2 + 1}`);
     lines.push(`input[0]: ${input[0]}, out[0]: ${out[0]}`);
     lines.push(timerInit.getElapsedMessage());
-    lines.push(timerPrep.getElapsedMessage());
-    lines.push(timerExec.getElapsedMessage());
-    lines.push(timerRead.getElapsedMessage());
+    lines.push(timerPrepare.getElapsedMessage());
+    lines.push(timerCompute.getElapsedMessage());
+    lines.push(timerMap.getElapsedMessage());
 
   }finally{
     readBuffer.unmap();
@@ -217,23 +217,29 @@ async function runAsync(): Promise<string[]> {
 }
 
 async function mainAsync(): Promise<void> {
-  const msg = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  if (!msg || !btn) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
       // ウォームアップ + 本計測
       const warmup = await runAsync();
       const main   = await runAsync();
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }
