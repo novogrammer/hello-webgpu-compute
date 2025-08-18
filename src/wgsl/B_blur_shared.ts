@@ -131,33 +131,36 @@ function makeCommandBuffer(
   pass.end();
 
   encoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, outputBuffer.size);
-  return encoder.finish();
+  
+  const commandBuffer = encoder.finish();
+
+  return commandBuffer;
 }
 
 async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
 
-  const tInit = new Timer('init');
-  const tPrep = new Timer('prepare');
-  const tComp = new Timer('compute');
-  const tMap  = new Timer('map');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerMap  = new Timer('map');
 
-  tInit.start();
+  timerInit.start();
   const device = await initWebGpuAsync();
-  tInit.stop();
+  timerInit.stop();
 
-  tPrep.start();
+  timerPrepare.start();
 
   // 入力画像（チェッカーボード）→ Float32 RGBA (0..1)
   drawCheckerBoard(canvasInput, WIDTH, HEIGHT);
-  const inputF32 = toFloat32Array(getImageData(canvasInput));
-  const byteLength = inputF32.byteLength;
+  const input = toFloat32Array(getImageData(canvasInput));
+  const byteLength = input.byteLength;
 
   const inputBuffer = device.createBuffer({
     size: byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
   });
-  device.queue.writeBuffer(inputBuffer, 0, inputF32);
+  device.queue.writeBuffer(inputBuffer, 0, input);
 
   const outputBuffer = device.createBuffer({
     size: byteLength,
@@ -177,27 +180,27 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
   });
   device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
-  tPrep.stop();
+  timerPrepare.stop();
 
   try {
-    tComp.start();
+    timerCompute.start();
     const cmd = makeCommandBuffer(device, uniformBuffer, inputBuffer, outputBuffer, readBuffer);
     device.queue.submit([cmd]);
     await device.queue.onSubmittedWorkDone();
-    tComp.stop();
+    timerCompute.stop();
 
-    tMap.start();
+    timerMap.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
-    const outF32 = new Float32Array(readBuffer.getMappedRange());
-    showImageData(canvasOutput, toUint8ClampedArray(outF32), WIDTH, HEIGHT);
-    tMap.stop();
+    const output = new Float32Array(readBuffer.getMappedRange());
+    showImageData(canvasOutput, toUint8ClampedArray(output), WIDTH, HEIGHT);
+    timerMap.stop();
 
     lines.push(`WIDTH×HEIGHT: ${WIDTH}×${HEIGHT}, R=${RADIUS} → n=${RADIUS * 2 + 1}`);
-    lines.push(`in[0]: ${inputF32[0]}, out[0]: ${outF32[0]}`);
-    lines.push(tInit.getElapsedMessage());
-    lines.push(tPrep.getElapsedMessage());
-    lines.push(tComp.getElapsedMessage());
-    lines.push(tMap.getElapsedMessage());
+    lines.push(`input[0]: ${input[0]}, output[0]: ${output[0]}`);
+    lines.push(timerInit.getElapsedMessage());
+    lines.push(timerPrepare.getElapsedMessage());
+    lines.push(timerCompute.getElapsedMessage());
+    lines.push(timerMap.getElapsedMessage());
   } finally {
     readBuffer.unmap();
     inputBuffer.destroy();
@@ -211,24 +214,38 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
 }
 
 async function mainAsync(): Promise<void> {
-  const msg  = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn  = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  const cin  = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
-  const cout = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
-  if (!msg || !btn || !cin || !cout) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
-      const warmup = await runAsync(cin, cout);
-      const main   = await runAsync(cin, cout);
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      // ウォームアップ + 本計測
+      const warmup = await runAsync(canvasInputElement, canvasOutputElement);
+      const main   = await runAsync(canvasInputElement, canvasOutputElement);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }

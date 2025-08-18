@@ -7,7 +7,7 @@ import { disposeWebGpuAsync, initWebGpuAsync } from './wgsl_utils';
 const WIDTH = 1024;
 const HEIGHT = 1024;
 // n×n カーネル：R=1 → 3×3, R=3 → 7×7 など
-const RADIUS = 1;
+const RADIUS = 3;
 
 const WORKGROUP_X = 16;
 const WORKGROUP_Y = 16;
@@ -86,23 +86,14 @@ function makeCommandBuffer(
 ) {
 
   const module = device.createShaderModule({ code: shaderCode });
-
-  // bindGroupLayout（自動推論でも可。明示するほうが安定）
-  const bindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
-      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
-      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-    ]
-  });
     
   const pipeline = device.createComputePipeline({
-    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+    layout: 'auto',
     compute: { module, entryPoint: 'main' }
   });
 
   const bindGroup = device.createBindGroup({
-    layout: bindGroupLayout,
+    layout: pipeline.getBindGroupLayout(0),
     entries: [
       { binding: 0, resource: { buffer: inputBuffer } },
       { binding: 1, resource: { buffer: outputBuffer } },
@@ -127,10 +118,10 @@ function makeCommandBuffer(
 async function runAsync(canvasInputElement:HTMLCanvasElement,canvasOutputElement:HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
 
-  const timerInit  = new Timer('init');
-  const timerPrepare  = new Timer('prepare');
-  const timerCompute  = new Timer('compute');
-  const timerMap  = new Timer('map');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerMap = new Timer('map');
 
   timerInit.start();
   const device = await initWebGpuAsync();
@@ -138,12 +129,11 @@ async function runAsync(canvasInputElement:HTMLCanvasElement,canvasOutputElement
 
   timerPrepare.start();
 
-  const pixels = WIDTH * HEIGHT;
-  const byteLength = pixels * 4 * 4; // RGBA * f32
 
+  // 入力画像（チェッカーボード）→ Float32 RGBA (0..1)
   drawCheckerBoard(canvasInputElement,WIDTH,HEIGHT);
-
   const input=toFloat32Array(getImageData(canvasInputElement));
+  const byteLength = input.byteLength;
 
   const inputBuffer = device.createBuffer({
     size: byteLength,
