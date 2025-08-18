@@ -3,8 +3,8 @@ import { drawCheckerBoard, getImageData, showImageData, toFloat32Array, toUint8C
 import Timer from '../utils/Timer';
 import { disposeWebGpuAsync, initWebGpuAsync } from './wgsl_utils';
 
-const WIDTH = 512;
-const HEIGHT = 512;
+const WIDTH = 1024;
+const HEIGHT = 1024;
 const WORKGROUP_X = 16;
 const WORKGROUP_Y = 16;
 const DISPATCH_X = Math.ceil(WIDTH / WORKGROUP_X);
@@ -119,39 +119,30 @@ function makeCommandEncoderForSteps(
   return encoder.finish();
 }
 
-async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promise<string[]> {
+async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
-  const tInit = new Timer('init');
-  const tPrep = new Timer('prepare');
-  const tComp = new Timer('steps');
-  const tMap  = new Timer('map');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerMap  = new Timer('map');
 
-  tInit.start();
+  timerInit.start();
   const device = await initWebGpuAsync();
-  tInit.stop();
+  timerInit.stop();
 
-  tPrep.start();
+  timerPrepare.start();
 
-  // 初期状態：チェッカーボードを強めに二値化して種にする
-  drawCheckerBoard(cin, WIDTH, HEIGHT);
-  const f32rgba = toFloat32Array(getImageData(cin)); // RGBA(0..1)
-  // R>=0.5 を1、それ以外0に丸める（視覚的にわかりやすくするため）
-  for (let i = 0; i < f32rgba.length; i += 4) {
-    const alive = f32rgba[i] >= 0.5 ? 1 : 0;
-    f32rgba[i + 0] = alive;
-    f32rgba[i + 1] = alive;
-    f32rgba[i + 2] = alive;
-    f32rgba[i + 3] = 1;
-  }
-
-  const byteLength = f32rgba.byteLength;
+  // 初期状態：チェッカーボードを種にする
+  drawCheckerBoard(canvasInput, WIDTH, HEIGHT);
+  const input = toFloat32Array(getImageData(canvasInput)); // RGBA(0..1)
+  const byteLength = input.byteLength;
 
   // ピンポン用 2 バッファ
   const bufferA = device.createBuffer({
     size: byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
-  device.queue.writeBuffer(bufferA, 0, f32rgba);
+  device.queue.writeBuffer(bufferA, 0, input);
 
   const bufferB = device.createBuffer({
     size: byteLength,
@@ -177,32 +168,32 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
     layout: 'auto',
     compute: { module, entryPoint: 'main' }
   });
-  const bgl = pipeline.getBindGroupLayout(0);
+  const bindGroupLayout = pipeline.getBindGroupLayout(0);
 
-  tPrep.stop();
+  timerPrepare.stop();
 
   try {
-    tComp.start();
+    timerCompute.start();
     const cmd = makeCommandEncoderForSteps(
-      device, pipeline, bgl, uniformBuffer,
+      device, pipeline, bindGroupLayout, uniformBuffer,
       bufferA, bufferB, STEPS, readBuffer
     );
     device.queue.submit([cmd]);
     await device.queue.onSubmittedWorkDone();
-    tComp.stop();
+    timerCompute.stop();
 
-    tMap.start();
+    timerMap.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
-    const outF32 = new Float32Array(readBuffer.getMappedRange());
+    const output = new Float32Array(readBuffer.getMappedRange());
     // そのまま描画（1か0のグレースケール）
-    showImageData(cout, toUint8ClampedArray(outF32), WIDTH, HEIGHT);
-    tMap.stop();
+    showImageData(canvasOutput, toUint8ClampedArray(output), WIDTH, HEIGHT);
+    timerMap.stop();
 
     lines.push(`Game of Life: ${WIDTH}×${HEIGHT}, steps=${STEPS}`);
-    lines.push(tInit.getElapsedMessage());
-    lines.push(tPrep.getElapsedMessage());
-    lines.push(tComp.getElapsedMessage());
-    lines.push(tMap.getElapsedMessage());
+    lines.push(timerInit.getElapsedMessage());
+    lines.push(timerPrepare.getElapsedMessage());
+    lines.push(timerCompute.getElapsedMessage());
+    lines.push(timerMap.getElapsedMessage());
   } finally {
     readBuffer.unmap();
     bufferA.destroy();
@@ -216,25 +207,38 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
 }
 
 async function mainAsync(): Promise<void> {
-  const msg  = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn  = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  const cin  = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
-  const cout = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
-  if (!msg || !btn || !cin || !cout) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
       // ウォームアップ + 本計測
-      const warmup = await runAsync(cin, cout);
-      const main   = await runAsync(cin, cout);
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      const warmup = await runAsync(canvasInputElement, canvasOutputElement);
+      const main   = await runAsync(canvasInputElement, canvasOutputElement);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }
