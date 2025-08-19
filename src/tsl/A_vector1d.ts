@@ -1,8 +1,7 @@
 import '../style.scss'
-// src/tsl/A_vector1d.ts
+
 import Timer from '../utils/Timer';
 
-// three.js + TSL
 import { WebGPURenderer,StorageInstancedBufferAttribute } from 'three/webgpu';
 import { Fn, storage, instanceIndex } from 'three/tsl';
 
