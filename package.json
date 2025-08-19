@@ -10,9 +10,13 @@
   },
   "devDependencies": {
     "@types/node": "^24.2.1",
+    "@types/three": "^0.179.0",
     "@webgpu/types": "^0.1.64",
     "sass": "^1.90.0",
     "typescript": "~5.8.3",
     "vite": "^7.1.0"
+  },
+  "dependencies": {
+    "three": "^0.179.1"
   }
 }
