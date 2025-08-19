@@ -121,7 +121,7 @@ async function runAsync(canvasInputElement:HTMLCanvasElement,canvasOutputElement
   const timerInit = new Timer('init');
   const timerPrepare = new Timer('prepare');
   const timerCompute = new Timer('compute');
-  const timerMap = new Timer('map');
+  const timerRead = new Timer('read');
 
   timerInit.start();
   const device = await initWebGpuAsync();
@@ -171,18 +171,18 @@ async function runAsync(canvasInputElement:HTMLCanvasElement,canvasOutputElement
     await device.queue.onSubmittedWorkDone();
     timerCompute.stop();
 
-    timerMap.start();
+    timerRead.start();
     await readBuffer.mapAsync(GPUMapMode.READ);
     const output = new Float32Array(readBuffer.getMappedRange());
     showImageData(canvasOutputElement,toUint8ClampedArray(output),WIDTH,HEIGHT);
-    timerMap.stop();
+    timerRead.stop();
 
     lines.push(`WIDTH×HEIGHT: ${WIDTH}×${HEIGHT}, R=${RADIUS} → n=${RADIUS * 2 + 1}`);
     lines.push(`input[0]: ${input[0]}, output[0]: ${output[0]}`);
     lines.push(timerInit.getElapsedMessage());
     lines.push(timerPrepare.getElapsedMessage());
     lines.push(timerCompute.getElapsedMessage());
-    lines.push(timerMap.getElapsedMessage());
+    lines.push(timerRead.getElapsedMessage());
 
   }finally{
     readBuffer.unmap();

@@ -13,7 +13,7 @@ import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
 import { Fn, storage, instanceIndex, uint, int, If, mod, Loop, float, clamp } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
-const SHOW_COMPUTE_SHADER = true;
+const SHOW_COMPUTE_SHADER = false;
 
 const WIDTH = 1024;
 const HEIGHT = 1024;
@@ -24,28 +24,30 @@ const DISPATCH_X = Math.ceil(PIXELS / WORKGROUP);
 
 const RADIUS = 3; // ← この定数を変えれば範囲可変
 
-async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promise<string[]> {
+async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputElement: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
-  const tInit = new Timer('init');
-  const tPrep = new Timer('prepare');
-  const tComp = new Timer('compute');
-  const tRead = new Timer('read');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerRead = new Timer('read');
 
-  tInit.start();
-  const renderer = new WebGPURenderer({ forceWebGL: ENABLE_FORCE_WEBGL });
+  timerInit.start();
+  const renderer = new WebGPURenderer({
+    forceWebGL: ENABLE_FORCE_WEBGL,
+  });
   await renderer.init();
-  tInit.stop();
+  timerInit.stop();
 
   // 入力データ
-  tPrep.start();
-  drawCheckerBoard(cin, WIDTH, HEIGHT);
-  const inF32 = toFloat32Array(getImageData(cin));
+  timerPrepare.start();
+  drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
+  const inputData = toFloat32Array(getImageData(canvasInputElement));
 
-  const inputAttr = new StorageInstancedBufferAttribute(inF32, 1);
-  const outputAttr = new StorageInstancedBufferAttribute(new Float32Array(inF32.length), 1);
+  const inputAttribute = new StorageInstancedBufferAttribute(inputData, 1);
+  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 1);
 
-  const inputNode = storage(inputAttr, 'float', inF32.length);
-  const outputNode = storage(outputAttr, 'float', inF32.length);
+  const inputNode = storage(inputAttribute, 'float', inputData.length);
+  const outputNode = storage(outputAttribute, 'float', inputData.length);
 
   const W = uint(WIDTH);
   const H = uint(HEIGHT);
@@ -95,55 +97,66 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
 
   const kernel = kernelFn().computeKernel([WORKGROUP, 1, 1]);
 
-  tPrep.stop();
+  timerPrepare.stop();
 
-  tComp.start();
+  timerCompute.start();
   await renderer.computeAsync(kernel, [DISPATCH_X, 1, 1]);
-  tComp.stop();
+  timerCompute.stop();
 
   if (SHOW_COMPUTE_SHADER) {
-    try {
-      // @ts-ignore
-      lines.push((renderer as any)._nodes.getForCompute(kernel).computeShader);
-    } catch {}
+    lines.push((renderer as any)._nodes.getForCompute(kernel).computeShader);
   }
 
-  tRead.start();
-  const outBuffer = await renderer.getArrayBufferAsync(outputAttr);
-  const outF32 = new Float32Array(outBuffer);
-  tRead.stop();
+  timerRead.start();
+  const outputBuffer = await renderer.getArrayBufferAsync(outputAttribute);
+  const outputData = new Float32Array(outputBuffer);
+  timerRead.stop();
 
-  showImageData(cout, toUint8ClampedArray(outF32), WIDTH, HEIGHT);
+  showImageData(canvasOutputElement, toUint8ClampedArray(outputData), WIDTH, HEIGHT);
 
   lines.push(`B_blur_naive (TSL)  WIDTH×HEIGHT=${WIDTH}×${HEIGHT}, R=${RADIUS}`);
-  lines.push(tInit.getElapsedMessage());
-  lines.push(tPrep.getElapsedMessage());
-  lines.push(tComp.getElapsedMessage());
-  lines.push(tRead.getElapsedMessage());
+  lines.push(timerInit.getElapsedMessage());
+  lines.push(timerPrepare.getElapsedMessage());
+  lines.push(timerCompute.getElapsedMessage());
+  lines.push(timerRead.getElapsedMessage());
 
   renderer.dispose();
   return lines;
 }
 
 async function mainAsync(): Promise<void> {
-  const msg = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  const cin = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
-  const cout = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
-  if (!msg || !btn || !cin || !cout) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
-      const warmup = await runAsync(cin, cout);
-      const main = await runAsync(cin, cout);
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      // ウォームアップ + 本計測
+      const warmup = await runAsync(canvasInputElement, canvasOutputElement);
+      const main = await runAsync(canvasInputElement, canvasOutputElement);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }
