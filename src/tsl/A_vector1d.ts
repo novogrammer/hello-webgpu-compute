@@ -6,6 +6,8 @@ import Timer from '../utils/Timer';
 import { WebGPURenderer,StorageInstancedBufferAttribute } from 'three/webgpu';
 import { Fn, storage, instanceIndex } from 'three/tsl';
 
+const ENABLE_FORCE_WEBGL=false;
+const SHOW_COMPUTE_SHADER=false;
 const NUM_ELEMENTS = 1024 * 1024;
 const WORKGROUP = 64;
 const DISPATCH_X = Math.ceil(NUM_ELEMENTS / WORKGROUP);
@@ -20,6 +22,7 @@ async function runAsync(): Promise<string[]> {
   // renderer は compute だけに使うので描画用シーンは不要
   timerInit.start();
   const renderer = new WebGPURenderer({
+    forceWebGL:ENABLE_FORCE_WEBGL,
   });
   await renderer.init();
   timerInit.stop();
@@ -49,6 +52,10 @@ async function runAsync(): Promise<string[]> {
   const kernel = kernelFn().computeKernel([WORKGROUP, 1, 1]);
   await renderer.computeAsync(kernel, [DISPATCH_X, 1, 1]);
   timerCompute.stop();
+
+  if(SHOW_COMPUTE_SHADER){
+    lines.push((renderer as any)._nodes.getForCompute(kernel).computeShader);
+  }
 
   // 結果の読み戻し
   timerRead.start();
