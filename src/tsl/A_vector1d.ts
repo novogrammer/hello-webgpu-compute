@@ -3,7 +3,7 @@ import '../style.scss'
 import Timer from '../utils/Timer';
 
 import { WebGPURenderer,StorageInstancedBufferAttribute } from 'three/webgpu';
-import { Fn, storage, instanceIndex } from 'three/tsl';
+import { Fn, storage, instanceIndex, int, If } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL=false;
 const SHOW_COMPUTE_SHADER=false;
@@ -41,9 +41,11 @@ async function runAsync(): Promise<string[]> {
 
   // 各スレッド i について: outputBuffer[i] = inputBuffer[i] * 2
   const kernelFn = Fn(() => {
-    const inputValue = inputBufferNode.element(instanceIndex);
-    const outputValue = outputBufferNode.element(instanceIndex);
-    outputValue.assign(inputValue.mul(2.0));
+    If(instanceIndex.lessThan(int(NUM_ELEMENTS)),()=>{
+      const inputValue = inputBufferNode.element(instanceIndex);
+      const outputValue = outputBufferNode.element(instanceIndex);
+      outputValue.assign(inputValue.mul(2.0));
+    })
   });
 
 
