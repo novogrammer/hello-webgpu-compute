@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  base:"./",
   root: 'src',
   publicDir: '../public',
   build: {
@@ -21,5 +22,12 @@ export default defineConfig({
         // tsl_C: resolve(__dirname, 'src/tsl/C_game_of_life.html')
       }
     }
-  }
+  },
+  server:{
+    host: '0.0.0.0',
+    allowedHosts: [
+      '.ngrok-free.app',
+    ],    
+  },
+
 });
