@@ -19,8 +19,11 @@ const WIDTH = 1024;
 const HEIGHT = 1024;
 
 const PIXELS = WIDTH * HEIGHT;
-const WORKGROUP = 64;
-const DISPATCH_X = Math.ceil(PIXELS / WORKGROUP);
+
+const WORKGROUP_X = 16;
+const WORKGROUP_Y = 16;
+const DISPATCH_X = Math.ceil(WIDTH / WORKGROUP_X);
+const DISPATCH_Y = Math.ceil(HEIGHT / WORKGROUP_Y);
 
 const RADIUS = 3; // ← この定数を変えれば範囲可変
 
@@ -95,12 +98,12 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
 
   });
 
-  const kernel = kernelFn().computeKernel([WORKGROUP, 1, 1]);
+  const kernel = kernelFn().computeKernel([WORKGROUP_X, WORKGROUP_Y, 1]);
 
   timerPrepare.stop();
 
   timerCompute.start();
-  await renderer.computeAsync(kernel, [DISPATCH_X, 1, 1]);
+  await renderer.computeAsync(kernel, [DISPATCH_X, DISPATCH_Y, 1]);
   timerCompute.stop();
 
   if (SHOW_COMPUTE_SHADER) {
