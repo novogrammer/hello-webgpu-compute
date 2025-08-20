@@ -54,12 +54,12 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
 
   const W = int(WIDTH).toVar("W");
   const H = int(HEIGHT).toVar("H");
-  const pixels = int(PIXELS).toVar("pixels");
+  const P = int(PIXELS).toVar("P");
 
 
   const kernelFn = Fn(() => {
     const i = int(instanceIndex).toVar("i");
-    If(i.lessThan(pixels), () => {
+    If(i.lessThan(P), () => {
 
       const x = mod(i, W).toVar("x");
       const y = i.div(W).toVar("y");

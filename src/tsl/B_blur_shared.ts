@@ -36,45 +36,45 @@ const RADIUS = 3;                       // 3→ 7x7
 const DISPATCH_X = Math.ceil(WIDTH  / TILE_X);
 const DISPATCH_Y = Math.ceil(HEIGHT / TILE_Y);
 
-// 1D 実行（WebGL フォールバック）
-// const WG_1D = 64;
-// const DISPATCH_1D = Math.ceil(PIXELS / WG_1D);
-
-async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promise<string[]> {
+async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
-  const tInit = new Timer('init');
-  const tPrep = new Timer('prepare');
-  const tComp = new Timer('compute');
-  const tRead = new Timer('read');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerRead = new Timer('read');
 
   // renderer
-  tInit.start();
-  const renderer = new WebGPURenderer({ forceWebGL: ENABLE_FORCE_WEBGL });
+  timerInit.start();
+  const renderer = new WebGPURenderer({
+    forceWebGL: ENABLE_FORCE_WEBGL,
+  });
   await renderer.init();
-  tInit.stop();
+  timerInit.stop();
 
   // 入力準備
-  tPrep.start();
-  drawCheckerBoard(cin, WIDTH, HEIGHT);
-  const inF32 = toFloat32Array(getImageData(cin));            // RGBA F32
-  const inputAttr  = new StorageInstancedBufferAttribute(inF32, 4);
-  const outputAttr = new StorageInstancedBufferAttribute(new Float32Array(inF32.length), 4);
+  timerPrepare.start();
+  drawCheckerBoard(canvasInput, WIDTH, HEIGHT);
+  const inputData = toFloat32Array(getImageData(canvasInput));            // RGBA F32
+  const inputAttribute  = new StorageInstancedBufferAttribute(inputData, 4);
+  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
   // TSL ノード化（PBO 読み取り可、出力は書き込み可）
-  const inputNode  = storage(inputAttr,  'vec4', inputAttr.count).setPBO(true).toReadOnly().setName('input');
-  const outputNode = storage(outputAttr, 'vec4', outputAttr.count).setName('output');
+  const inputNode  = storage(inputAttribute,  'vec4', inputAttribute.count).setPBO(true).toReadOnly().setName('input');
+  const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName('output');
 
-  const W = int(WIDTH), H = int(HEIGHT), P = int(PIXELS);
+  const W = int(WIDTH);
+  const H = int(HEIGHT);
+  const P = int(PIXELS);
 
   // ---- Kernel 定義 ----
   // WebGPU 経路：タイル＋ハローを共有メモリに協調ロード
   const kernelShared = Fn(() => {
     // 2D 座標（ワークグループ座標とローカル座標）
-    const gid  = workgroupId.toVar("gid");         // (wx, wy, wz)
+    const wid  = workgroupId.toVar("gid");         // (wx, wy, wz)
     const lid  = localId.toVar("lid");   // (lx, ly, lz)
 
-    const wx = int(gid.x).toVar("wx");
-    const wy = int(gid.y).toVar("wy");
+    const wx = int(wid.x).toVar("wx");
+    const wy = int(wid.y).toVar("wy");
     const lx = int(lid.x).toVar("lx");
     const ly = int(lid.y).toVar("ly");
 
@@ -84,8 +84,8 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
 
     // PAD = タイル＋ハロー
     const PAD_X = TILE_X + 2 * RADIUS;
-    const padX = int(PAD_X).toVar("padX");
     const PAD_Y = TILE_Y + 2 * RADIUS;
+    const padX = int(PAD_X).toVar("padX");
     const padY = int(PAD_Y).toVar("padY");
 
     // 共有メモリ（vec4）: PAD_X * PAD_Y
@@ -105,10 +105,10 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
         const slx = int(i).toVar("slx");
 
         // 読み元のグローバル座標（境界は clamp）
-        const gx = clamp(tileOx.add(slx).sub(int(RADIUS)), int(0), W.sub(1)).toVar("gx");
-        const gy = clamp(tileOy.add(sly).sub(int(RADIUS)), int(0), H.sub(1)).toVar("gy");
+        const gxRead = clamp(tileOx.add(slx).sub(int(RADIUS)), int(0), W.sub(1)).toVar("gxRead");
+        const gyRead = clamp(tileOy.add(sly).sub(int(RADIUS)), int(0), H.sub(1)).toVar("gyRead");
 
-        const gIndex = gy.mul(W).add(gx).toVar("gIndex"); // ピクセル index
+        const gIndex = gyRead.mul(W).add(gxRead).toVar("gIndex"); // ピクセル index
         // VRAM→共有メモリ
         const ti=tindex(slx, sly).toVar("ti");
         tile.element(ti).assign(inputNode.element(gIndex));
@@ -120,13 +120,11 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
 
     // ---- 2) 畳み込み（共有メモリから読み） ----
     // 対応する出力画素のグローバル座標
-    const gx2 = tileOx.add(lx).toVar("gx2");
-    const gy2 = tileOy.add(ly).toVar("gy2");
+    const gxWrite = tileOx.add(lx).toVar("gxWrite");
+    const gyWrite = tileOy.add(ly).toVar("gyWrite");
 
     // 端の余りスレッドは無効化
-    If(gx2.lessThan(W).and(gy2.lessThan(H)), () => {
-      const lx0 = lx.add(int(RADIUS)).toVar("lx0");
-      const ly0 = ly.add(int(RADIUS)).toVar("ly0");
+    If(gxWrite.lessThan(W).and(gyWrite.lessThan(H)), () => {
 
       const sum = vec4(0).toVar('sum');
       const count = float(0).toVar('count');
@@ -135,13 +133,13 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
         const dy = int(i).toVar("dy");
         Loop({ start: int(-RADIUS), end: int(RADIUS), condition: '<=' }, ({ i }) => {
           const dx = int(i).toVar("dx");
-          const ti = tindex(lx0.add(dx), ly0.add(dy)).toVar("ti");
+          const ti = tindex(lx.add(int(RADIUS)).add(dx), ly.add(int(RADIUS)).add(dy)).toVar("ti");
           sum.addAssign(tile.element(ti));
           count.addAssign(1);
         });
       });
 
-      const outIndex = gy2.mul(W).add(gx2).toVar("outIndex"); // ピクセル index
+      const outIndex = gyWrite.mul(W).add(gxWrite).toVar("outIndex"); // ピクセル index
       outputNode.element(outIndex).assign(sum.div(count));
     });
   });
@@ -173,42 +171,43 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
   });
 
   // 経路分岐：WebGPUなら共有メモリ版、WebGLならナイーブ1D
-  const computeNode = ENABLE_FORCE_WEBGL
-    ? kernelNaive1D().compute(PIXELS)                            // 1D 実行（インスタンス数=画素数）
-    : kernelShared().computeKernel([TILE_X, TILE_Y, 1]); // 2D WG
+  let computeNode;
+  if(ENABLE_FORCE_WEBGL){
+    // 1D 実行（インスタンス数=画素数）
+    computeNode=kernelNaive1D().compute(PIXELS);
+  }else{
+    // 2D WG
+    computeNode=kernelShared().computeKernel([TILE_X, TILE_Y, 1]);
+  }
 
-  tPrep.stop();
+  timerPrepare.stop();
 
   // 実行
-  tComp.start();
+  timerCompute.start();
   if (ENABLE_FORCE_WEBGL) {
     await renderer.computeAsync(computeNode);                    // 1D はサイズ指定不要
   } else {
     await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
   }
-  tComp.stop();
+  timerCompute.stop();
 
   if (SHOW_COMPUTE_SHADER) {
-    try {
-      // 内部APIのため try/catch
-      // @ts-ignore
-      lines.push((renderer as any)._nodes.getForCompute(computeNode).computeShader);
-    } catch {}
+    lines.push((renderer as any)._nodes.getForCompute(computeNode).computeShader);
   }
 
   // 読み戻し→表示
-  tRead.start();
-  const outBuf = await renderer.getArrayBufferAsync(outputAttr);
-  const outF32 = new Float32Array(outBuf);
-  tRead.stop();
+  timerRead.start();
+  const outputBuffer = await renderer.getArrayBufferAsync(outputAttribute);
+  const outputData = new Float32Array(outputBuffer);
+  timerRead.stop();
 
-  showImageData(cout, toUint8ClampedArray(outF32), WIDTH, HEIGHT);
+  showImageData(canvasOutput, toUint8ClampedArray(outputData), WIDTH, HEIGHT);
 
   lines.push(`B_blur_shared (TSL) WIDTH×HEIGHT=${WIDTH}×${HEIGHT}, R=${RADIUS}`);
-  lines.push(tInit.getElapsedMessage());
-  lines.push(tPrep.getElapsedMessage());
-  lines.push(tComp.getElapsedMessage());
-  lines.push(tRead.getElapsedMessage());
+  lines.push(timerInit.getElapsedMessage());
+  lines.push(timerPrepare.getElapsedMessage());
+  lines.push(timerCompute.getElapsedMessage());
+  lines.push(timerRead.getElapsedMessage());
 
   renderer.dispose();
   return lines;
@@ -216,24 +215,38 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
 
 // ---- UI ひな形 ----
 async function mainAsync(): Promise<void> {
-  const msg  = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn  = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  const cin  = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
-  const cout = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
-  if (!msg || !btn || !cin || !cout) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
-      const warmup = await runAsync(cin, cout);
-      const main   = await runAsync(cin, cout);
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      // ウォームアップ + 本計測
+      const warmup = await runAsync(canvasInputElement, canvasOutputElement);
+      const main   = await runAsync(canvasInputElement, canvasOutputElement);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }
