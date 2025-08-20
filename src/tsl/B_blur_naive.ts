@@ -39,6 +39,8 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
     forceWebGL: ENABLE_FORCE_WEBGL,
   });
   await renderer.init();
+  const isWebGPUBackend=!!((renderer.backend as any).isWebGPUBackend);
+  console.log(`isWebGPUBackend: ${isWebGPUBackend}`);
   timerInit.stop();
 
   // 入力データ
@@ -90,20 +92,20 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   });
 
   let computeNode;
-  if(ENABLE_FORCE_WEBGL){
-    computeNode = kernelFn().compute(PIXELS);
-  }else{
+  if(isWebGPUBackend){
     computeNode = kernelFn().computeKernel([WORKGROUP_X, WORKGROUP_Y, 1]);
+  }else{
+    computeNode = kernelFn().compute(PIXELS);
   }
 
   timerPrepare.stop();
 
   timerCompute.start();
 
-  if(ENABLE_FORCE_WEBGL){
-    await renderer.computeAsync(computeNode);
-  }else{
+  if(isWebGPUBackend){
     await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
+  }else{
+    await renderer.computeAsync(computeNode);
   }
   timerCompute.stop();
 

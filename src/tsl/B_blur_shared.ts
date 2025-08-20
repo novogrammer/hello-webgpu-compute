@@ -48,7 +48,10 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
   const renderer = new WebGPURenderer({
     forceWebGL: ENABLE_FORCE_WEBGL,
   });
+  
   await renderer.init();
+  const isWebGPUBackend=!!((renderer.backend as any).isWebGPUBackend);
+  console.log(`isWebGPUBackend: ${isWebGPUBackend}`);
   timerInit.stop();
 
   // 入力準備
@@ -172,22 +175,22 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
 
   // 経路分岐：WebGPUなら共有メモリ版、WebGLならナイーブ1D
   let computeNode;
-  if(ENABLE_FORCE_WEBGL){
-    // 1D 実行（インスタンス数=画素数）
-    computeNode=kernelNaive1D().compute(PIXELS);
-  }else{
+  if(isWebGPUBackend){
     // 2D WG
     computeNode=kernelShared().computeKernel([TILE_X, TILE_Y, 1]);
+  }else{
+    // 1D 実行（インスタンス数=画素数）
+    computeNode=kernelNaive1D().compute(PIXELS);
   }
 
   timerPrepare.stop();
 
   // 実行
   timerCompute.start();
-  if (ENABLE_FORCE_WEBGL) {
-    await renderer.computeAsync(computeNode);                    // 1D はサイズ指定不要
-  } else {
+  if (isWebGPUBackend) {
     await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
+  } else {
+    await renderer.computeAsync(computeNode);
   }
   timerCompute.stop();
 
