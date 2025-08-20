@@ -10,7 +10,7 @@ import {
 } from '../utils/canvas_utils';
 
 import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
-import { Fn, instanceIndex, int, mod, Loop, float, clamp, vec4, storage } from 'three/tsl';
+import { Fn, instanceIndex, int, mod, Loop, float, clamp, vec4, storage, If } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
 const SHOW_COMPUTE_SHADER = false;
@@ -54,34 +54,38 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
 
   const W = int(WIDTH).toVar("W");
   const H = int(HEIGHT).toVar("H");
+  const pixels = int(PIXELS).toVar("pixels");
+
 
   const kernelFn = Fn(() => {
     const i = int(instanceIndex).toVar("i");
+    If(i.lessThan(pixels), () => {
 
-    const x = mod(i, W).toVar("x");
-    const y = i.div(W).toVar("y");
+      const x = mod(i, W).toVar("x");
+      const y = i.div(W).toVar("y");
 
-    // 出力用
-    const sum = vec4(0).toVar("sum");
-    const count = float(0).toVar("count");
+      // 出力用
+      const sum = vec4(0).toVar("sum");
+      const count = float(0).toVar("count");
 
-    // dy = -R .. +R
-    Loop({start:int(-RADIUS),end:int(RADIUS),condition:'<='}, ({i}) => {
-      const dy=int(i).toVar("dy");
-      // dx = -R .. +R
+      // dy = -R .. +R
       Loop({start:int(-RADIUS),end:int(RADIUS),condition:'<='}, ({i}) => {
-        const dx=int(i).toVar("dx");
-        const nx = clamp(x.add(dx),0,W.sub(1)).toVar("nx");
-        const ny = clamp(y.add(dy),0,H.sub(1)).toVar("ny");
-        const index = (ny.mul(W).add(nx)).toVar("index");
+        const dy=int(i).toVar("dy");
+        // dx = -R .. +R
+        Loop({start:int(-RADIUS),end:int(RADIUS),condition:'<='}, ({i}) => {
+          const dx=int(i).toVar("dx");
+          const nx = clamp(x.add(dx),0,W.sub(1)).toVar("nx");
+          const ny = clamp(y.add(dy),0,H.sub(1)).toVar("ny");
+          const index = (ny.mul(W).add(nx)).toVar("index");
 
-        sum.addAssign(inputNode.element(index));
-        count.addAssign(1);
+          sum.addAssign(inputNode.element(index));
+          count.addAssign(1);
+        });
       });
-    });
 
-    const outputIndex = (y.mul(W).add(x)).toVar("outputIndex");
-    outputNode.element(outputIndex).assign(sum.div(count));
+      const outputIndex = (y.mul(W).add(x)).toVar("outputIndex");
+      outputNode.element(outputIndex).assign(sum.div(count));
+    });
 
   });
 
