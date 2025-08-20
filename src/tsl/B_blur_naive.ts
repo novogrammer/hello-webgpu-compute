@@ -10,7 +10,7 @@ import {
 } from '../utils/canvas_utils';
 
 import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
-import { Fn, storage, instanceIndex, int, If, mod, Loop, float, clamp } from 'three/tsl';
+import { Fn, instanceIndex, int, If, mod, Loop, float, clamp, vec4, storage } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
 const SHOW_COMPUTE_SHADER = false;
@@ -46,11 +46,11 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
   const inputData = toFloat32Array(getImageData(canvasInputElement));
 
-  const inputAttribute = new StorageInstancedBufferAttribute(inputData, 1);
-  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 1);
+  const inputAttribute = new StorageInstancedBufferAttribute(inputData, 4);
+  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
-  const inputNode = storage(inputAttribute, 'float', inputData.length);
-  const outputNode = storage(outputAttribute, 'float', inputData.length);
+  const inputNode = storage(inputAttribute, 'vec4',inputAttribute.count).setPBO(true).toReadOnly().setName("inputNode");
+  const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName("outputNode");
 
   const W = int(WIDTH).toVar("W");
   const H = int(HEIGHT).toVar("H");
@@ -64,10 +64,7 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
       const y = i.div(W).toVar("y");
 
       // 出力用
-      const sumR = float(0).toVar("sumR");
-      const sumG = float(0).toVar("sumG");
-      const sumB = float(0).toVar("sumB");
-      const sumA = float(0).toVar("sumA");
+      const sum = vec4(0).toVar("sum");
       const count = float(0).toVar("count");
 
       // dy = -R .. +R
@@ -78,22 +75,15 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
           const dx=int(i).toVar("dx");
           const nx = clamp(x.add(dx),0,W.sub(1)).toVar("nx");
           const ny = clamp(y.add(dy),0,H.sub(1)).toVar("ny");
-          const base = (ny.mul(W).add(nx)).mul(4).toVar("base");
+          const index = (ny.mul(W).add(nx)).toVar("index");
 
-          sumR.addAssign(inputNode.element(base.add(0)));
-          sumG.addAssign(inputNode.element(base.add(1)));
-          sumB.addAssign(inputNode.element(base.add(2)));
-          sumA.addAssign(inputNode.element(base.add(3)));
+          sum.addAssign(inputNode.element(index));
           count.addAssign(1);
         });
       });
 
-      const invCount=float(1).div(count).toVar("invCount")
-      const outputBase = (y.mul(W).add(x)).mul(4).toVar("outputBase");
-      outputNode.element(outputBase.add(0)).assign(sumR.mul(invCount));
-      outputNode.element(outputBase.add(1)).assign(sumG.mul(invCount));
-      outputNode.element(outputBase.add(2)).assign(sumB.mul(invCount));
-      outputNode.element(outputBase.add(3)).assign(sumA.mul(invCount));
+      const outputIndex = (y.mul(W).add(x)).toVar("outputIndex");
+      outputNode.element(outputIndex).assign(sum.div(count));
     });
 
   });
