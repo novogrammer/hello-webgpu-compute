@@ -10,7 +10,7 @@ import {
 } from '../utils/canvas_utils';
 
 import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
-import { Fn, storage, instanceIndex, uint, int, If, mod, Loop, float, clamp } from 'three/tsl';
+import { Fn, storage, instanceIndex, int, If, mod, Loop, float, clamp } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
 const SHOW_COMPUTE_SHADER = false;
@@ -52,16 +52,16 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   const inputNode = storage(inputAttribute, 'float', inputData.length);
   const outputNode = storage(outputAttribute, 'float', inputData.length);
 
-  const W = uint(WIDTH);
-  const H = uint(HEIGHT);
-  const pixelsU = uint(PIXELS);
+  const W = int(WIDTH).toVar("W");
+  const H = int(HEIGHT).toVar("H");
+  const pixels = int(PIXELS).toVar("pixels");
 
   const kernelFn = Fn(() => {
-    const i = instanceIndex.toVar("i");
-    If(i.lessThanEqual(pixelsU), () => {
+    const i = int(instanceIndex).toVar("i");
+    If(i.lessThan(pixels), () => {
 
-      const x = int(mod(i, W)).toVar("x");
-      const y = int(i.div(W)).toVar("y");
+      const x = mod(i, W).toVar("x");
+      const y = i.div(W).toVar("y");
 
       // 出力用
       const sumR = float(0).toVar("sumR");
@@ -76,8 +76,8 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
         // dx = -R .. +R
         Loop({start:int(-RADIUS),end:int(RADIUS),condition:'<='}, ({i}) => {
           const dx=int(i).toVar("dx");
-          const nx = clamp(x.add(dx),0,W).toVar("nx");
-          const ny = clamp(y.add(dy),0,H).toVar("ny");
+          const nx = clamp(x.add(dx),0,W.sub(1)).toVar("nx");
+          const ny = clamp(y.add(dy),0,H.sub(1)).toVar("ny");
           const base = (ny.mul(W).add(nx)).mul(4).toVar("base");
 
           sumR.addAssign(inputNode.element(base.add(0)));
