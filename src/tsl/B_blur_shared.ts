@@ -61,8 +61,10 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
   const inputAttribute  = new StorageInstancedBufferAttribute(inputData, 4);
   const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
-  // TSL ノード化（PBO 読み取り可、出力は書き込み可）
-  const inputNode  = storage(inputAttribute,  'vec4', inputAttribute.count).setPBO(true).toReadOnly().setName('input');
+  const inputNode  = storage(inputAttribute,  'vec4', inputAttribute.count).toReadOnly().setName('input');
+  if(!isWebGPUBackend){
+    inputNode.setPBO(true);
+  }
   const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName('output');
 
   const W = int(WIDTH);

@@ -51,7 +51,10 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   const inputAttribute = new StorageInstancedBufferAttribute(inputData, 4);
   const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
-  const inputNode = storage(inputAttribute, 'vec4',inputAttribute.count).setPBO(true).toReadOnly().setName("inputNode");
+  const inputNode = storage(inputAttribute, 'vec4',inputAttribute.count).toReadOnly().setName("inputNode");
+  if(!isWebGPUBackend){
+    inputNode.setPBO(true);
+  }
   const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName("outputNode");
 
   const W = int(WIDTH).toVar("W");
