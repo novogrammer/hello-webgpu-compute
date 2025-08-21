@@ -142,7 +142,7 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
     size: byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
   });
-  device.queue.writeBuffer(bufferA, 0, input);
+  device.queue.writeBuffer(bufferA, 0, input.buffer);
 
   const bufferB = device.createBuffer({
     size: byteLength,
