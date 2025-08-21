@@ -1,6 +1,5 @@
 import '../style.scss'
 
-
 import Timer from '../utils/Timer';
 import {
   drawCheckerBoard,
@@ -28,40 +27,41 @@ const WORKGROUP_Y = 16;
 const DISPATCH_X = Math.ceil(WIDTH  / WORKGROUP_X);
 const DISPATCH_Y = Math.ceil(HEIGHT / WORKGROUP_Y);
 
-async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promise<string[]> {
+async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputElement: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
-  const tInit = new Timer('init');
-  const tPrep = new Timer('prepare');
-  const tComp = new Timer('compute');
-  const tRead = new Timer('read');
+  const timerInit = new Timer('init');
+  const timerPrepare = new Timer('prepare');
+  const timerCompute = new Timer('compute');
+  const timerRead = new Timer('read');
 
   // --- Renderer
-  tInit.start();
-  const renderer = new WebGPURenderer({ forceWebGL: ENABLE_FORCE_WEBGL });
+  timerInit.start();
+  const renderer = new WebGPURenderer({
+    forceWebGL: ENABLE_FORCE_WEBGL,
+  });
   await renderer.init();
-  const isWebGPU = !!((renderer.backend as any)?.isWebGPUBackend);
-  lines.push(`isWebGPUBackend: ${isWebGPU}`);
-  tInit.stop();
+  const isWebGPUBackend = !!((renderer.backend as any)?.isWebGPUBackend);
+  lines.push(`isWebGPUBackend: ${isWebGPUBackend}`);
+  timerInit.stop();
 
   // --- 入力（チェッカーパターンを 0/1 として扱う）
-  tPrep.start();
-  drawCheckerBoard(cin, WIDTH, HEIGHT);
-  const inF32 = toFloat32Array(getImageData(cin)); // RGBA(0..1)
+  timerPrepare.start();
+  drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
+  const inputData = toFloat32Array(getImageData(canvasInputElement)); // RGBA(0..1)
 
-  const inputAttr  = new StorageInstancedBufferAttribute(inF32, 4);
-  const outputAttr = new StorageInstancedBufferAttribute(new Float32Array(inF32.length), 4);
+  const inputAttribute  = new StorageInstancedBufferAttribute(inputData, 4);
+  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
-  // ストレージノード化（WebGL時のみPBOをON）
-  const inputNodeBase  = storage(inputAttr,  'vec4', inputAttr.count).toReadOnly().setName('input');
-  const inputNode = isWebGPU ? inputNodeBase : inputNodeBase.setPBO(true);
-  const outputNode = storage(outputAttr, 'vec4', outputAttr.count).setName('output');
+  const inputNode  = storage(inputAttribute,  'vec4', inputAttribute.count).toReadOnly().setName('input');
+  if(!isWebGPUBackend){
+    inputNode.setPBO(true);
+  }
+  const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName('output');
 
   const W = int(WIDTH);
   const H = int(HEIGHT);
   const P = int(PIXELS);
 
-  // --- カーネル（ナイーブ：近傍8セル合計 → ルール適用）
-  // wrap（トーラス）: (x+dx+W)%W, (y+dy+H)%H
   const kernelFn = Fn(() => {
     const i = int(instanceIndex).toVar('i');
     If(i.lessThan(P), () => {
@@ -113,67 +113,78 @@ async function runAsync(cin: HTMLCanvasElement, cout: HTMLCanvasElement): Promis
   });
 
   // 実行ノード（WebGPU: 2D / WebGL: 1D）
-  const computeNode = isWebGPU
-    ? kernelFn().computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
-    : kernelFn().compute(PIXELS);
-
-  tPrep.stop();
+  let computeNode;
+  if(isWebGPUBackend){
+    computeNode = kernelFn().computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
+  }else{
+    computeNode = kernelFn().compute(PIXELS);
+  }
+  timerPrepare.stop();
 
   // --- 実行
-  tComp.start();
-  if (isWebGPU) {
+  timerCompute.start();
+  if (isWebGPUBackend) {
     await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
   } else {
     await renderer.computeAsync(computeNode); // 1D: インスタンス数 = PIXELS
   }
-  tComp.stop();
+  timerCompute.stop();
 
   if (SHOW_COMPUTE_SHADER) {
-    try {
-      // @ts-ignore 内部API
-      console.log((renderer as any)._nodes.getForCompute(computeNode).computeShader);
-    } catch {}
+    lines.push((renderer as any)._nodes.getForCompute(computeNode).computeShader);
   }
 
   // --- 読み戻し & 表示
-  tRead.start();
-  const outBuf = await renderer.getArrayBufferAsync(outputAttr);
-  const outF32 = new Float32Array(outBuf);
-  tRead.stop();
+  timerRead.start();
+  const outputBuffer = await renderer.getArrayBufferAsync(outputAttribute);
+  const outputData = new Float32Array(outputBuffer);
+  timerRead.stop();
 
-  showImageData(cout, toUint8ClampedArray(outF32), WIDTH, HEIGHT);
+  showImageData(canvasOutputElement, toUint8ClampedArray(outputData), WIDTH, HEIGHT);
 
   lines.push(`C_game_of_life (TSL naive) WIDTH×HEIGHT=${WIDTH}×${HEIGHT}`);
-  lines.push(tInit.getElapsedMessage());
-  lines.push(tPrep.getElapsedMessage());
-  lines.push(tComp.getElapsedMessage());
-  lines.push(tRead.getElapsedMessage());
+  lines.push(timerInit.getElapsedMessage());
+  lines.push(timerPrepare.getElapsedMessage());
+  lines.push(timerCompute.getElapsedMessage());
+  lines.push(timerRead.getElapsedMessage());
 
   renderer.dispose();
   return lines;
 }
 
-// ---- UI ----
 async function mainAsync(): Promise<void> {
-  const msg = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
-  const btn = document.querySelector<HTMLButtonElement>('.p-demo__execute');
-  const cin = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
-  const cout = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
-  if (!msg || !btn || !cin || !cout) throw new Error('elements not found');
+  const messageElement = document.querySelector<HTMLTextAreaElement>('.p-demo__message');
+  if(!messageElement){
+    throw new Error("messageElement is null");
+  }
 
-  btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    msg.value = 'computing...';
+  const executeElement = document.querySelector<HTMLButtonElement>('.p-demo__execute');
+  if(!executeElement){
+    throw new Error("executeElement is null");
+  }
+
+  const canvasInputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--input');
+  if(!canvasInputElement){
+    throw new Error("canvasInputElement is null");
+  }
+  const canvasOutputElement = document.querySelector<HTMLCanvasElement>('.p-demo__canvas--output');
+  if(!canvasOutputElement){
+    throw new Error("canvasOutputElement is null");
+  }
+
+  executeElement.addEventListener('click', async () => {
+    executeElement.disabled = true;
+    messageElement.value = 'computing...';
     try {
-      // 1ステップだけ。複数ステップ回したい場合はループして ping-pong してください。
-      const warmup = await runAsync(cin, cout);
-      const main   = await runAsync(cin, cout);
-      msg.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-      console.error(e);
+      // ウォームアップ + 本計測
+      const warmup = await runAsync(canvasInputElement, canvasOutputElement);
+      const main   = await runAsync(canvasInputElement, canvasOutputElement);
+      messageElement.value = ['ウォームアップ', ...warmup, '本計測', ...main].join('\n');
+    } catch (error: any) {
+      alert(error?.message ?? String(error));
+      console.error(error);
     } finally {
-      btn.disabled = false;
+      executeElement.disabled = false;
     }
   });
 }

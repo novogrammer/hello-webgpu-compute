@@ -119,7 +119,7 @@ function makeCommandEncoderForSteps(
   return encoder.finish();
 }
 
-async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvasElement): Promise<string[]> {
+async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputElement: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
   const timerInit = new Timer('init');
   const timerPrepare = new Timer('prepare');
@@ -133,8 +133,8 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
   timerPrepare.start();
 
   // 初期状態：チェッカーボードを種にする
-  drawCheckerBoard(canvasInput, WIDTH, HEIGHT);
-  const input = toFloat32Array(getImageData(canvasInput)); // RGBA(0..1)
+  drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
+  const input = toFloat32Array(getImageData(canvasInputElement)); // RGBA(0..1)
   const byteLength = input.byteLength;
 
   // ピンポン用 2 バッファ
@@ -186,7 +186,7 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
     await readBuffer.mapAsync(GPUMapMode.READ);
     const output = new Float32Array(readBuffer.getMappedRange());
     // そのまま描画（1か0のグレースケール）
-    showImageData(canvasOutput, toUint8ClampedArray(output), WIDTH, HEIGHT);
+    showImageData(canvasOutputElement, toUint8ClampedArray(output), WIDTH, HEIGHT);
     timerMap.stop();
 
     lines.push(`Game of Life: ${WIDTH}×${HEIGHT}, steps=${STEPS}`);
