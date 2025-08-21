@@ -12,7 +12,8 @@ import {
 import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
 import {
   Fn, storage, instanceIndex, int, float, vec4,
-  If, Loop, } from 'three/tsl';
+  If, Loop,
+  select, } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
 const SHOW_COMPUTE_SHADER = true;
@@ -69,46 +70,50 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
       const y = i.div(W).toVar('y');
 
       // 現在セルの状態（Rチャネルを 0/1 と解釈：checkerBoardなら既に0か1）
-      const selfIdx = y.mul(W).add(x).toVar('selfIdx');
-      const selfVal = inputNode.element(selfIdx).x.toVar('selfVal'); // 0 or 1
-
+      const selfIndex = y.mul(W).add(x).toVar('selfIndex');
+      const selfAlive = inputNode.element(selfIndex).x.toVar('selfAlive')
+      selfAlive.assign(select(selfAlive.lessThan(0.5),0, 1)); // 0 or 1
+      
       // 近傍合計（自分は除外）
-      const sum = float(0).toVar('sum');
+      const neighbors = float(0).toVar('neighbors');
 
       Loop({ start: int(-1), end: int(1), condition: '<=' }, ({ i }) => {
         const dy = int(i).toVar('dy');
         Loop({ start: int(-1), end: int(1), condition: '<=' }, ({ i }) => {
           const dx = int(i).toVar('dx');
-
           // if (dx==0 && dy==0) continue;
-          If(dx.equal(0).and(dy.equal(0)), () => {
-            // do nothing (skip self)
-          });
-          // wrap 近傍
-          const nx = x.add(dx).add(W).mod(W).toVar('nx');
-          const ny = y.add(dy).add(H).mod(H).toVar('ny');
-          const nIdx = ny.mul(W).add(nx).toVar('nIdx');
+          If(dx.equal(0).and(dy.equal(0)).not(), () => {
+            // wrap 近傍
+            const nx = x.add(dx).add(W).mod(W).toVar('nx');
+            const ny = y.add(dy).add(H).mod(H).toVar('ny');
+            const index = ny.mul(W).add(nx).toVar('index');
 
-          const nVal = inputNode.element(nIdx).x; // 近傍のR
-          sum.addAssign(nVal);
+            const alive = inputNode.element(index).x.toVar("alive"); // 近傍のR
+            alive.assign(select(alive.lessThan(0.5),0, 1));
+            neighbors.addAssign(alive);
+          });
         });
       });
 
       // ルール：
       //  birth = (sum == 3)
       //  survive = (sum == 2 && self == 1)
-      const birth   = float(0).toVar('birth');
-      const survive = float(0).toVar('survive');
+      const nextAlive = float(0).toVar("nextAlive");
+      If(selfAlive,()=>{
+        If(neighbors.equal(2).or(neighbors.equal(3)),()=>{
+          nextAlive.assign(float(1));
+        });
+      }).Else(()=>{
+        If(neighbors.equal(3),()=>{
+          nextAlive.assign(float(1));
+        });
+      });
 
-      If(sum.equal(3.0), () => birth.assign(1.0));
-      If(sum.equal(2.0).and(selfVal.greaterThan(0.5)), () => survive.assign(1.0));
-
-      const next = birth.add(survive).toVar('next'); // 0 or 1
       // 表示のため RGBA 同値、αは1.0固定
-      const outIdx = selfIdx;
-      const outValue = vec4(next).toVar('outValue');
+      const outIndex = selfIndex.toVar("outIndex");
+      const outValue = vec4(nextAlive).toVar('outValue');
       outValue.w.assign(1.0);
-      outputNode.element(outIdx).assign(outValue);
+      outputNode.element(outIndex).assign(outValue);
     });
   });
 
