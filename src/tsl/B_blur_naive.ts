@@ -40,7 +40,7 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   });
   await renderer.init();
   const isWebGPUBackend=!!((renderer.backend as any).isWebGPUBackend);
-  console.log(`isWebGPUBackend: ${isWebGPUBackend}`);
+  lines.push(`isWebGPUBackend: ${isWebGPUBackend}`);
   timerInit.stop();
 
   // 入力データ

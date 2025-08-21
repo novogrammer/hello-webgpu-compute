@@ -24,6 +24,8 @@ async function runAsync(): Promise<string[]> {
     forceWebGL:ENABLE_FORCE_WEBGL,
   });
   await renderer.init();
+  const isWebGPUBackend=!!((renderer.backend as any).isWebGPUBackend);
+  lines.push(`isWebGPUBackend: ${isWebGPUBackend}`);
   timerInit.stop();
 
   const inputData = new Float32Array(NUM_ELEMENTS);
