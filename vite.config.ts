@@ -21,7 +21,7 @@ export default defineConfig({
         tsl_A: resolve(__dirname, 'src/tsl/A_vector1d.html'),
         tsl_Bn: resolve(__dirname, 'src/tsl/B_blur_naive.html'),
         tsl_Bs: resolve(__dirname, 'src/tsl/B_blur_shared.html'),
-        // tsl_C: resolve(__dirname, 'src/tsl/C_game_of_life.html')
+        tsl_C: resolve(__dirname, 'src/tsl/C_game_of_life.html')
       }
     }
   },
