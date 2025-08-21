@@ -16,7 +16,7 @@ import {
   select, } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
-const SHOW_COMPUTE_SHADER = true;
+const SHOW_COMPUTE_SHADER = false;
 
 const WIDTH = 1024;
 const HEIGHT = 1024;
@@ -72,7 +72,7 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
       // 現在セルの状態（Rチャネルを 0/1 と解釈：checkerBoardなら既に0か1）
       const selfIndex = y.mul(W).add(x).toVar('selfIndex');
       const selfAlive = inputNode.element(selfIndex).x.toVar('selfAlive')
-      selfAlive.assign(select(selfAlive.lessThan(0.5),0, 1)); // 0 or 1
+      selfAlive.assign(select(selfAlive.lessThan(0.5),float(0), float(1))); // 0 or 1
       
       // 近傍合計（自分は除外）
       const neighbors = float(0).toVar('neighbors');
@@ -89,7 +89,7 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
             const index = ny.mul(W).add(nx).toVar('index');
 
             const alive = inputNode.element(index).x.toVar("alive"); // 近傍のR
-            alive.assign(select(alive.lessThan(0.5),0, 1));
+            alive.assign(select(alive.lessThan(0.5),float(0), float(1)));
             neighbors.addAssign(alive);
           });
         });
@@ -99,7 +99,7 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
       //  birth = (sum == 3)
       //  survive = (sum == 2 && self == 1)
       const nextAlive = float(0).toVar("nextAlive");
-      If(selfAlive,()=>{
+      If(selfAlive.greaterThan(0.5),()=>{
         If(neighbors.equal(2).or(neighbors.equal(3)),()=>{
           nextAlive.assign(float(1));
         });
