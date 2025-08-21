@@ -28,6 +28,10 @@ const WORKGROUP_Y = 16;
 const DISPATCH_X = Math.ceil(WIDTH  / WORKGROUP_X);
 const DISPATCH_Y = Math.ceil(HEIGHT / WORKGROUP_Y);
 
+// 何世代回すか
+const STEPS = 200;
+
+
 async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputElement: HTMLCanvasElement): Promise<string[]> {
   const lines: string[] = [];
   const timerInit = new Timer('init');
@@ -49,21 +53,20 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   timerPrepare.start();
   drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
   const inputData = toFloat32Array(getImageData(canvasInputElement)); // RGBA(0..1)
+  timerPrepare.stop();
 
   const inputAttribute  = new StorageInstancedBufferAttribute(inputData, 4);
   const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
-  const inputNode  = storage(inputAttribute,  'vec4', inputAttribute.count).toReadOnly().setName('input');
-  if(!isWebGPUBackend){
-    inputNode.setPBO(true);
-  }
-  const outputNode = storage(outputAttribute, 'vec4', outputAttribute.count).setName('output');
+    // 2組のバッファ
+  let readAttribute  = inputAttribute;
+  let writeAttribute = outputAttribute;
 
   const W = int(WIDTH);
   const H = int(HEIGHT);
   const P = int(PIXELS);
 
-  const kernelFn = Fn(() => {
+  const kernelFn = Fn(([inputNode, outputNode]:[ReturnType<typeof storage>,ReturnType<typeof storage>]) => {
     const i = int(instanceIndex).toVar('i');
     If(i.lessThan(P), () => {
       const x = i.mod(W).toVar('x');
@@ -117,31 +120,47 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
     });
   });
 
-  // 実行ノード（WebGPU: 2D / WebGL: 1D）
-  let computeNode;
-  if(isWebGPUBackend){
-    computeNode = kernelFn().computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
-  }else{
-    computeNode = kernelFn().compute(PIXELS);
-  }
-  timerPrepare.stop();
-
-  // --- 実行
+    // --- 計算ループ ---
   timerCompute.start();
-  if (isWebGPUBackend) {
-    await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
-  } else {
-    await renderer.computeAsync(computeNode); // 1D: インスタンス数 = PIXELS
+  for (let step = 0; step < STEPS; step++) {
+    const inputNode  = storage(readAttribute,  'vec4', readAttribute.count).toReadOnly().setName('input');
+    const outputNode = storage(writeAttribute, 'vec4', writeAttribute.count).setName('output');
+    if(!isWebGPUBackend){
+      inputNode.setPBO(true);
+      outputNode.setPBO(true);
+    }
+
+
+    // 実行ノード（WebGPU: 2D / WebGL: 1D）
+    const computeNode = isWebGPUBackend
+      ? kernelFn(inputNode, outputNode).computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
+      : kernelFn(inputNode, outputNode).compute(PIXELS);
+
+    if (isWebGPUBackend) {
+      await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
+    } else {
+      await renderer.computeAsync(computeNode);
+      
+    }
+
+    // swap
+    [readAttribute, writeAttribute] = [writeAttribute, readAttribute];
+
+
+    if(step===0){
+      if (SHOW_COMPUTE_SHADER) {
+        lines.push((renderer as any)._nodes.getForCompute(computeNode).computeShader);
+      }
+    }
   }
   timerCompute.stop();
 
-  if (SHOW_COMPUTE_SHADER) {
-    lines.push((renderer as any)._nodes.getForCompute(computeNode).computeShader);
-  }
 
   // --- 読み戻し & 表示
   timerRead.start();
-  const outputBuffer = await renderer.getArrayBufferAsync(outputAttribute);
+
+  // --- 最終出力を読み戻し ---
+  const outputBuffer = await renderer.getArrayBufferAsync(readAttribute);
   const outputData = new Float32Array(outputBuffer);
   timerRead.stop();
 
