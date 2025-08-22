@@ -9,11 +9,12 @@ import {
   toUint8ClampedArray,
 } from '../utils/canvas_utils';
 
-import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
+import { WebGPURenderer, StorageInstancedBufferAttribute,ComputeNode } from 'three/webgpu';
 import {
   Fn, storage, instanceIndex, int, float, vec4,
   If, Loop,
-  select, } from 'three/tsl';
+  select,
+  type ShaderNodeObject, } from 'three/tsl';
 
 const ENABLE_FORCE_WEBGL = false;
 const SHOW_COMPUTE_SHADER = false;
@@ -53,14 +54,13 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   timerPrepare.start();
   drawCheckerBoard(canvasInputElement, WIDTH, HEIGHT);
   const inputData = toFloat32Array(getImageData(canvasInputElement)); // RGBA(0..1)
-  timerPrepare.stop();
 
-  const inputAttribute  = new StorageInstancedBufferAttribute(inputData, 4);
-  const outputAttribute = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
+  const dataAttributeA  = new StorageInstancedBufferAttribute(inputData, 4);
+  const dataAttributeB = new StorageInstancedBufferAttribute(new Float32Array(inputData.length), 4);
 
     // 2組のバッファ
-  let readAttribute  = inputAttribute;
-  let writeAttribute = outputAttribute;
+  let readAttribute  = dataAttributeA;
+  let writeAttribute = dataAttributeB;
 
   const W = int(WIDTH);
   const H = int(HEIGHT);
@@ -120,22 +120,36 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
     });
   });
 
+  let computeNodePing:ShaderNodeObject<ComputeNode>;
+  let computeNodePong:ShaderNodeObject<ComputeNode>;
+  {
+    const storageNodeA=storage(dataAttributeA,  'vec4', dataAttributeA.count).setName('storageNodeA');
+    const storageNodeB=storage(dataAttributeB,  'vec4', dataAttributeB.count).setName('storageNodeB');
+    if(!isWebGPUBackend){
+      storageNodeA.setPBO(true);
+      storageNodeB.setPBO(true);
+    }
+    const computeNodeList=[
+      [storageNodeA,storageNodeB],
+      [storageNodeB,storageNodeA],
+    ].map(([inputNode,outputNode])=>{
+      // 実行ノード（WebGPU: 2D / WebGL: 1D）
+      return isWebGPUBackend
+      ? kernelFn(inputNode, outputNode).computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
+      : kernelFn(inputNode, outputNode).compute(PIXELS);
+    });
+    computeNodePing=computeNodeList[0];
+    computeNodePong=computeNodeList[1];
+
+  }
+  timerPrepare.stop();
+
+
     // --- 計算ループ ---
   timerCompute.start();
   for (let step = 0; step < STEPS; step++) {
-    const inputNode  = storage(readAttribute,  'vec4', readAttribute.count).toReadOnly().setName('input');
-    const outputNode = storage(writeAttribute, 'vec4', writeAttribute.count).setName('output');
-    if(!isWebGPUBackend){
-      inputNode.setPBO(true);
-      outputNode.setPBO(true);
-    }
 
-
-    // 実行ノード（WebGPU: 2D / WebGL: 1D）
-    const computeNode = isWebGPUBackend
-      ? kernelFn(inputNode, outputNode).computeKernel([WORKGROUP_X, WORKGROUP_Y, 1])
-      : kernelFn(inputNode, outputNode).compute(PIXELS);
-
+    const computeNode=(step%2==0)?computeNodePing:computeNodePong;
     if (isWebGPUBackend) {
       await renderer.computeAsync(computeNode, [DISPATCH_X, DISPATCH_Y, 1]);
     } else {
@@ -145,7 +159,6 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
 
     // swap
     [readAttribute, writeAttribute] = [writeAttribute, readAttribute];
-
 
     if(step===0){
       if (SHOW_COMPUTE_SHADER) {
