@@ -20,8 +20,6 @@ import {
 } from 'three/tsl';
 
 // ---- 設定 ----
-const ENABLE_FORCE_WEBGL = false;      // true ならフォールバックを強制（ナイーブ）
-const SHOW_COMPUTE_SHADER = false;
 
 const WIDTH  = 1024;
 const HEIGHT = 1024;
@@ -42,6 +40,10 @@ async function runAsync(canvasInput: HTMLCanvasElement, canvasOutput: HTMLCanvas
   const timerPrepare = new Timer('prepare');
   const timerCompute = new Timer('compute');
   const timerRead = new Timer('read');
+
+  // Read runtime flags from checkboxes
+  const ENABLE_FORCE_WEBGL = document.querySelector<HTMLInputElement>('.p-demo__flag-webgl')?.checked ?? false;
+  const SHOW_COMPUTE_SHADER = document.querySelector<HTMLInputElement>('.p-demo__flag-show')?.checked ?? false;
 
   // renderer
   timerInit.start();

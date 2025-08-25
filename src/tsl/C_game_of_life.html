@@ -8,7 +8,11 @@
   <body>
     <div class="l-main p-demo">
       <textarea class="p-demo__message" rows="10" cols="80">結果がここに表示されます</textarea>
-      <button class="p-demo__execute">Run</button>
+      <div class="p-demo__controls">
+        <label><input type="checkbox" class="p-demo__flag-webgl"> Force WebGL</label>
+        <label><input type="checkbox" class="p-demo__flag-show"> Show compute shader</label>
+        <button class="p-demo__execute">Run</button>
+      </div>
       <canvas class="p-demo__canvas p-demo__canvas--input"></canvas>
       <canvas class="p-demo__canvas p-demo__canvas--output"></canvas>
     </div>

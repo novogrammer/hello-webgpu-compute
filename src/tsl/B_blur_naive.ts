@@ -12,9 +12,6 @@ import {
 import { WebGPURenderer, StorageInstancedBufferAttribute } from 'three/webgpu';
 import { Fn, instanceIndex, int, mod, Loop, float, clamp, vec4, storage, If } from 'three/tsl';
 
-const ENABLE_FORCE_WEBGL = false;
-const SHOW_COMPUTE_SHADER = false;
-
 const WIDTH = 1024;
 const HEIGHT = 1024;
 
@@ -33,6 +30,10 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   const timerPrepare = new Timer('prepare');
   const timerCompute = new Timer('compute');
   const timerRead = new Timer('read');
+
+  // Read runtime flags from checkboxes
+  const ENABLE_FORCE_WEBGL = document.querySelector<HTMLInputElement>('.p-demo__flag-webgl')?.checked ?? false;
+  const SHOW_COMPUTE_SHADER = document.querySelector<HTMLInputElement>('.p-demo__flag-show')?.checked ?? false;
 
   timerInit.start();
   const renderer = new WebGPURenderer({

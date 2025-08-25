@@ -4,9 +4,6 @@ import Timer from '../utils/Timer';
 
 import { WebGPURenderer,StorageInstancedBufferAttribute } from 'three/webgpu';
 import { Fn, storage, instanceIndex, int, If } from 'three/tsl';
-
-const ENABLE_FORCE_WEBGL=false;
-const SHOW_COMPUTE_SHADER=false;
 const NUM_ELEMENTS = 1024 * 1024;
 const WORKGROUP = 64;
 const DISPATCH_X = Math.ceil(NUM_ELEMENTS / WORKGROUP);
@@ -17,6 +14,10 @@ async function runAsync(): Promise<string[]> {
   const timerInit = new Timer('init');
   const timerCompute = new Timer('compute');
   const timerRead = new Timer('read');
+
+  // Read runtime flags from checkboxes
+  const ENABLE_FORCE_WEBGL = document.querySelector<HTMLInputElement>('.p-demo__flag-webgl')?.checked ?? false;
+  const SHOW_COMPUTE_SHADER = document.querySelector<HTMLInputElement>('.p-demo__flag-show')?.checked ?? false;
 
   // renderer は compute だけに使うので描画用シーンは不要
   timerInit.start();

@@ -16,8 +16,7 @@ import {
   select,
   type ShaderNodeObject, } from 'three/tsl';
 
-const ENABLE_FORCE_WEBGL = false;
-const SHOW_COMPUTE_SHADER = false;
+// Flags will be read at runtime from checkboxes
 
 const WIDTH = 1024;
 const HEIGHT = 1024;
@@ -40,7 +39,10 @@ async function runAsync(canvasInputElement: HTMLCanvasElement, canvasOutputEleme
   const timerCompute = new Timer('compute');
   const timerRead = new Timer('read');
 
-  // --- Renderer
+  // --- Renderer (flags from checkboxes)
+  const ENABLE_FORCE_WEBGL = document.querySelector<HTMLInputElement>('.p-demo__flag-webgl')?.checked ?? false;
+  const SHOW_COMPUTE_SHADER = document.querySelector<HTMLInputElement>('.p-demo__flag-show')?.checked ?? false;
+
   timerInit.start();
   const renderer = new WebGPURenderer({
     forceWebGL: ENABLE_FORCE_WEBGL,
